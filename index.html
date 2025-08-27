@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>GHL Opportunity Creator</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <h1>DS2D Opportunity Creator</h1>
+    </header>
+
+    <div class="section-box">
+      <label for="pipelineDropdown">Select Pipeline:</label>
+      <select id="pipelineDropdown">
+        <option value="">-- Loading pipelines... --</option>
+      </select>
+    </div>
+
+    <div class="section-box">
+      <h2>Select Columns to Display</h2>
+      <select id="mvpColumns" multiple></select>
+    </div>
+    
+    <div class="button-group">
+      <button onclick="fetchData()">Get Data</button>
+    </div>
+    
+    <div class="section-box">
+      <h2>Advanced Filters</h2>
+      <div id="refills-filter-container">
+        <label for="refillsDaysInput">Refills Coming Due in the Next</label>
+        <input type="number" id="refillsDaysInput" placeholder="value">
+        <label>days</label>
+      </div>
+  
+      <div id="filters-container"></div>
+      <button onclick="addFilterRow()">+ Add Filter</button>
+      <button onclick="applyFilters()">Apply Filters</button>
+    </div>
+    
+    <div id="message"></div>
+      <div id="mvp-table-container"></div>
+      <button id="createOpportunityBtn" onclick="createOpportunitiesFromTable()" disabled>Create Opportunity</button>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

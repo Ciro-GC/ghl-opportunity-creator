@@ -1,0 +1,207 @@
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f0f2f5;
+  color: #333;
+  margin: 0;
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 900px;
+  width: 95%;
+  padding: 30px;
+  background-color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+h1 {
+  color: #1a426f;
+  font-size: 2.5em;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+
+.section-box {
+  border: 1px solid #e0e6ed;
+  padding: 20px;
+  margin-bottom: 25px;
+  border-radius: 8px;
+  background-color: #fafbfd;
+  transition: box-shadow 0.3s ease;
+}
+
+.section-box:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+label {
+  font-weight: bold;
+  display: block;
+  margin-bottom: 8px;
+  color: #555;
+}
+
+select,
+input {
+  max-width: 350px;
+  max-height: 50px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-sizing: border-box;
+  font-size: 14px;
+  margin-bottom: 15px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+select:focus,
+input:focus {
+  outline: none;
+  border-color: #1a426f;
+  box-shadow: 0 0 0 3px rgba(26, 66, 111, 0.2);
+}
+
+select {
+  height: 150px;
+}
+
+#refillsDaysInput {
+  max-width: 80px;
+  display: inline-block;
+}
+
+#refills-filter-container label {
+  display: inline-block;
+  margin-right: 5px;
+}
+
+.button-group {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 25px;
+}
+
+button {
+  flex-grow: 1;
+  padding: 12px 20px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  background-color: #1a426f;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+button:hover {
+  background-color: #21598f;
+  transform: translateY(-2px);
+}
+
+button:disabled {
+  background-color: #cdd4dc;
+  cursor: not-allowed;
+  transform: none;
+}
+
+#createOpportunityBtn {
+  margin-top: 20px;
+  background-color: #28a745;
+  display: block;
+  width: 100%;
+}
+
+#createOpportunityBtn:hover {
+  background-color: #218838;
+}
+
+#mvp-table-container {
+  overflow-x: auto;
+  margin-top: 25px;
+  border-radius: 8px;
+  border: 1px solid #e0e6ed;
+}
+
+table {
+  border-collapse: collapse;
+  width: 40%;
+  white-space: nowrap;
+}
+
+th,
+td {
+  border: 1px solid #e0e6ed;
+  padding: 12px 15px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background-color: #f4f7f9;
+  color: #1a426f;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+tbody tr:nth-child(even) {
+  background-color: #f9fafc;
+}
+
+tbody tr:hover {
+  background-color: #eef2f5;
+}
+
+#message {
+  color: #c0392b;
+  background-color: #fcebeb;
+  padding: 10px;
+  border-radius: 5px;
+  margin-bottom: 20px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 15px;
+  align-items: center;
+}
+
+.filter-row select,
+.filter-row input {
+  flex: 1;
+  min-width: 120px;
+  margin-bottom: 0;
+}
+
+.filter-row button {
+  background-color: #c0392b;
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  flex-grow: 0;
+}
+
+.filter-row button:hover {
+  background-color: #e74c3c;
+}
