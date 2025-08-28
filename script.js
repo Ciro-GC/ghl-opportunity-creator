@@ -1,138 +1,197 @@
-const mvpColumnsDropdown = document.getElementById("mvpColumns");
+// --- DOM refs ---
 const mvpTableContainer = document.getElementById("mvp-table-container");
 const messageDiv = document.getElementById("message");
 const createOpportunityBtn = document.getElementById("createOpportunityBtn");
 const filtersContainer = document.getElementById("filters-container");
+const pipelineDropdown = document.getElementById("pipelineDropdown");
+const stageDropdown = document.getElementById("stageDropdown");
+const refillsDaysInput = document.getElementById("refillsDaysInput");
 
+// --- Config ---
 const BASE_URL = "https://4p6i86w6ac.execute-api.us-east-2.amazonaws.com/test";
 const API_KEY = "testing-12345";
 const GHL_TOKEN = "Bearer pit-3398d27c-748d-4be6-9f55-683030bdc377";
+const GHL_TOKEN_SUPERH = "Bearer pit-dcaef40d-3783-4aa9-a84f-88876be0a7da"
 const GHL_VERSION = "2021-07-28";
 const LOCATION_ID = "xWzbp40cgJND3UmZgNiS";
 
-// Global variables to hold pipeline and stage IDs
-let PIPELINE_ID = "TPk33GXjQMJVcDxQ5yNt";
-let PIPELINE_STAGE = "4ae95164-10ac-401f-8ea1-2f9290eb1ada";
+// --- Global state ---
+let PIPELINE_ID = null;
+let PIPELINE_STAGE_ID = null;
+let pipelinesCache = [];
 
+// --- Init ---
 window.onload = async () => {
   await loadPipelines();
-  await loadColumns();
 };
 
-document.getElementById('pipelineDropdown').addEventListener('change', (event) => {
-    const selected = JSON.parse(event.target.value);
-    if (selected) {
-        PIPELINE_ID = selected.pipelineId;
-        PIPELINE_STAGE = selected.stageId;
-    }
-});
-
-async function loadColumns() {
+// --- Pipelines & Stages ---
+async function loadPipelines() {
   try {
-    const table = "vw_mvp_simple";
+    const res = await fetch(
+      `https://services.leadconnectorhq.com/opportunities/pipelines?locationId=${LOCATION_ID}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: GHL_TOKEN,
+          Version: GHL_VERSION,
+          Accept: "application/json"
+        }
+      }
+    );
 
-    const res = await fetch(`${BASE_URL}/get_database_columns?table=${table}`, {
-      method: "GET",
-      headers: { "x-api-key": API_KEY }
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    const data = await res.json();
+
+    pipelinesCache = Array.isArray(data.pipelines) ? data.pipelines : [];
+    pipelineDropdown.innerHTML = `<option value="">-- Select pipeline --</option>`;
+
+    pipelinesCache.forEach((pipeline) => {
+      const opt = document.createElement("option");
+      opt.value = pipeline.id;
+      opt.textContent = pipeline.name;
+      pipelineDropdown.appendChild(opt);
     });
-    if (!res.ok) throw new Error(`Error fetching columns for ${table}`);
-    
-    const result = await res.json();
-    populateDropdown(mvpColumnsDropdown, result.columns);
 
-    // Pre-select all columns
-    Array.from(mvpColumnsDropdown.options).forEach(opt => {
-        opt.selected = true;
-    });
+    pipelineDropdown.onchange = () => {
+      const id = pipelineDropdown.value;
+      PIPELINE_ID = id || null;
+      populateStagesForPipeline(id);
+    };
 
-  } catch (e) {
-    console.error(e);
-    messageDiv.textContent = "Error loading columns.";
+    if (pipelinesCache.length > 0) {
+      pipelineDropdown.value = pipelinesCache[0].id;
+      PIPELINE_ID = pipelinesCache[0].id;
+      populateStagesForPipeline(PIPELINE_ID);
+    }
+  } catch (err) {
+    console.error("Error loading pipelines:", err);
+    pipelineDropdown.innerHTML = `<option value="">Error loading pipelines</option>`;
+    stageDropdown.innerHTML = `<option value="">--</option>`;
   }
 }
 
-function populateDropdown(dropdown, columns) {
-  dropdown.innerHTML = "";
-  (columns || []).filter(c => c).forEach(col => {
+function populateStagesForPipeline(pipelineId) {
+  stageDropdown.innerHTML = "";
+  stageDropdown.disabled = true;
+  PIPELINE_STAGE_ID = null;
+
+  const pipeline = pipelinesCache.find((p) => p.id === pipelineId);
+  const stages = pipeline?.stages || [];
+
+  if (!pipeline || stages.length === 0) {
+    stageDropdown.innerHTML = `<option value="">-- No stages found --</option>`;
+    return;
+  }
+
+  stages.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+
+  stageDropdown.innerHTML = `<option value="">-- Select stage --</option>`;
+  stages.forEach((stage) => {
     const opt = document.createElement("option");
-    opt.value = col;
-    opt.textContent = col;
-    dropdown.appendChild(opt);
+    opt.value = stage.id;
+    opt.textContent = stage.name;
+    stageDropdown.appendChild(opt);
   });
+
+  stageDropdown.disabled = false;
+
+  // default to first stage by position
+  stageDropdown.value = stages[0].id;
+  PIPELINE_STAGE_ID = stages[0].id;
+
+  stageDropdown.onchange = () => {
+    PIPELINE_STAGE_ID = stageDropdown.value || null;
+  };
 }
 
+// --- Data fetch (pre-filtered by days) ---
 async function fetchData() {
   messageDiv.textContent = "";
   mvpTableContainer.innerHTML = "";
   createOpportunityBtn.disabled = true;
 
-  const selectedCols = Array.from(mvpColumnsDropdown.options).map(opt => opt.value);
+  if (!PIPELINE_ID) {
+    messageDiv.textContent = "Please select a pipeline first.";
+    return;
+  }
+  if (!PIPELINE_STAGE_ID) {
+    messageDiv.textContent = "Please select a stage.";
+    return;
+  }
 
-  if (selectedCols.length === 0) {
-    messageDiv.textContent = "No columns available to display.";
+  const daysValue = parseInt(refillsDaysInput.value, 10);
+  if (Number.isNaN(daysValue) || daysValue <= 0) {
+    messageDiv.textContent = "Please enter a valid number of days for 'Refills Coming Due'.";
     return;
   }
 
   try {
-    const data = await getDataForTable("vw_mvp_simple", selectedCols);
-    if (data) {
-      createTable(selectedCols, data, mvpTableContainer);
-      createOpportunityBtn.disabled = false;
+    const tableName = "vw_mvp_simple";
+    const res = await fetch(`${BASE_URL}/get_data_from_columns`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": API_KEY
+      },
+      body: JSON.stringify({
+        table: tableName,
+        daysDue: daysValue
+      })
+    });
+
+    if (!res.ok) throw new Error(`HTTP error fetching data! status: ${res.status}`);
+    const result = await res.json();
+
+    if (!Array.isArray(result) || result.length === 0) {
+      messageDiv.textContent = "No rows matched the given refills window.";
+      return;
     }
+
+    // Build table with ALL columns returned by backend
+    const columns = Object.keys(result[0]);
+    createTable(columns, result, mvpTableContainer);
+    createOpportunityBtn.disabled = false;
+
+    // After data is loaded, enable adding filters
+    filtersContainer.innerHTML = ""; // reset any old filters
   } catch (e) {
     console.error(e);
     messageDiv.textContent = "Error fetching data.";
   }
 }
 
-async function getDataForTable(tableName, columns) {
-  const res = await fetch(`${BASE_URL}/get_data_from_columns`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": API_KEY
-    },
-    body: JSON.stringify({ table: tableName, columns: columns })
-  });
-
-  if (!res.ok) throw new Error(`HTTP error fetching data for ${tableName}! status: ${res.status}`);
-  
-  const result = await res.json();
-  if (!Array.isArray(result) || result.length === 0) {
-    messageDiv.textContent += `No data found for ${tableName}.`;
-    return null;
-  }
-
-  return result;
-}
-
+// --- Client-side filters ---
 function addFilterRow() {
   const row = document.createElement("div");
   row.classList.add("filter-row");
 
-  const colSelect = document.createElement("select");
-  
-  const newFilterOption = document.createElement("option");
-  newFilterOption.value = "Refills Coming Due";
-  colSelect.appendChild(newFilterOption);
+  // Get columns from current table header
+  const table = mvpTableContainer.querySelector("table");
+  const headers = table
+    ? Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent)
+    : [];
 
-  Array.from(mvpColumnsDropdown.options).forEach(opt => {
-    const option = document.createElement("option");
-    option.value = opt.value;
-    option.textContent = opt.textContent;
-    colSelect.appendChild(option);
-  });
-  
-  colSelect.onchange = (event) => {
-    if (event.target.value === "Refills Coming Due") {
-      operatorSelect.style.display = 'none';
-    } else {
-      operatorSelect.style.display = 'inline';
-    }
-  };
+  const colSelect = document.createElement("select");
+
+  // If no table yet, show a disabled single option
+  if (headers.length === 0) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Load data first";
+    colSelect.appendChild(opt);
+    colSelect.disabled = true;
+  } else {
+    headers.forEach((h) => {
+      const option = document.createElement("option");
+      option.value = h;
+      option.textContent = h;
+      colSelect.appendChild(option);
+    });
+  }
 
   const operatorSelect = document.createElement("select");
-  ["=", ">", "<"].forEach(op => {
+  ["=", ">", "<"].forEach((op) => {
     const option = document.createElement("option");
     option.value = op;
     option.textContent = op;
@@ -160,16 +219,10 @@ function applyFilters() {
   if (!table) return;
 
   const rows = table.querySelectorAll("tbody tr");
-  const headers = Array.from(table.querySelectorAll("thead th")).map(th => th.textContent);
+  const headers = Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent);
 
-  // Obtener el valor del nuevo campo de entrada fijo
-  const refillsDaysInput = document.getElementById("refillsDaysInput");
-  const daysValue = parseInt(refillsDaysInput.value, 10);
-  const refillDateIndex = headers.indexOf("Next refill date");
-  const isRefillsFilterActive = !isNaN(daysValue) && daysValue > 0 && refillDateIndex !== -1;
-
-  // Obtener los filtros dinámicos
-  const filters = Array.from(filtersContainer.querySelectorAll(".filter-row")).map(row => {
+  // Dynamic filters
+  const filters = Array.from(filtersContainer.querySelectorAll(".filter-row")).map((row) => {
     return {
       column: row.children[0].value,
       operator: row.children[1].value,
@@ -177,61 +230,46 @@ function applyFilters() {
     };
   });
 
-  rows.forEach(row => {
+  rows.forEach((row) => {
     const cells = Array.from(row.querySelectorAll("td"));
     let show = true;
 
-    // Aplicar el filtro de recargas próximas (si está activo)
-    if (isRefillsFilterActive) {
-      const refillDateStr = cells[refillDateIndex]?.textContent.trim();
-      if (refillDateStr) {
-        const refillDate = new Date(refillDateStr);
-        const today = new Date();
-        const cutOffDate = new Date();
-        cutOffDate.setDate(today.getDate() + daysValue);
-        
-        // La fila se oculta si la fecha de recarga no está en el rango
-        if (refillDate > cutOffDate || refillDate < today) {
-          show = false;
-        }
-      } else {
-        show = false;
-      }
-    }
+    for (let f of filters) {
+      const colIndex = headers.indexOf(f.column);
+      if (colIndex === -1) continue;
+      const cellValue = cells[colIndex]?.textContent.trim();
 
-    // Aplicar los filtros dinámicos
-    if (show) {
-      for (let f of filters) {
-        const colIndex = headers.indexOf(f.column);
-        if (colIndex === -1) continue;
-        const cellValue = cells[colIndex]?.textContent.trim();
-  
-        let left = isNaN(cellValue) ? cellValue : parseFloat(cellValue);
-        let right = isNaN(f.value) ? f.value : parseFloat(f.value);
-  
-        if (f.operator === "=") {
-          if (!isNaN(left) && !isNaN(right)) {
-            if (left != right) show = false;
-          } else {
-            if (!String(left).toLowerCase().includes(String(right).toLowerCase())) {
-              show = false;
-            }
+      let left = isNaN(cellValue) ? cellValue : parseFloat(cellValue);
+      let right = isNaN(f.value) ? f.value : parseFloat(f.value);
+
+      if (f.operator === "=") {
+        if (!isNaN(left) && !isNaN(right)) {
+          if (left != right) show = false;
+        } else {
+          if (!String(left).toLowerCase().includes(String(right).toLowerCase())) {
+            show = false;
           }
         }
-        if (f.operator === ">" && !(left > right)) show = false;
-        if (f.operator === "<" && !(left < right)) show = false;
       }
+      if (f.operator === ">" && !(left > right)) show = false;
+      if (f.operator === "<" && !(left < right)) show = false;
+
+      if (!show) break;
     }
 
     row.style.display = show ? "" : "none";
   });
 }
 
+// --- Table builder ---
 function createTable(columns, data, container) {
+  container.innerHTML = "";
+
   const table = document.createElement("table");
   const thead = document.createElement("thead");
   const headerRow = document.createElement("tr");
-  columns.forEach(col => {
+
+  columns.forEach((col) => {
     const th = document.createElement("th");
     th.textContent = col;
     headerRow.appendChild(th);
@@ -240,31 +278,36 @@ function createTable(columns, data, container) {
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-  data.forEach(row => {
-  const tr = document.createElement("tr");
-  columns.forEach(col => {
-    const td = document.createElement("td");
-    td.textContent = row[col] !== undefined ? row[col] : "";
-    tr.appendChild(td);
-  });
-  tbody.appendChild(tr);
+  data.forEach((row) => {
+    const tr = document.createElement("tr");
+    columns.forEach((col) => {
+      const td = document.createElement("td");
+      td.textContent = row[col] !== undefined ? row[col] : "";
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
   });
   table.appendChild(tbody);
 
   container.appendChild(table);
 }
 
+// --- Create Opportunities ---
 async function createOpportunitiesFromTable() {
   const table = mvpTableContainer.querySelector("table");
 
   if (!table) {
-      alert("No data table found. Please click 'Get Data' first.");
-      return;
+    alert("No data table found. Please click 'Get Data' first.");
+    return;
+  }
+  if (!PIPELINE_ID || !PIPELINE_STAGE_ID) {
+    alert("Please select a pipeline and stage.");
+    return;
   }
 
-  const columns = Array.from(table.querySelectorAll("thead th")).map(th => th.textContent);
-  const rows = Array.from(table.querySelectorAll("tbody tr")).filter(row => row.style.display !== "none");
-  
+  const columns = Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent);
+  const rows = Array.from(table.querySelectorAll("tbody tr")).filter((row) => row.style.display !== "none");
+
   let opportunitiesCreated = 0;
   for (const row of rows) {
     const cells = Array.from(row.querySelectorAll("td"));
@@ -273,9 +316,7 @@ async function createOpportunitiesFromTable() {
       selectedData[col] = cells[idx]?.textContent.trim() || "";
     });
 
-    console.log(selectedData)
-
-    // 1) Create contact or retrieve existing
+    // 1) Create/Retrieve Contact
     const contactPayload = {
       firstName: selectedData["First Name"],
       lastName: selectedData["Last Name"],
@@ -288,6 +329,7 @@ async function createOpportunitiesFromTable() {
       postalCode: selectedData["ZIP"],
       locationId: LOCATION_ID
     };
+
     let contactId;
     try {
       const contactRes = await fetch("https://services.leadconnectorhq.com/contacts/", {
@@ -322,12 +364,12 @@ async function createOpportunitiesFromTable() {
       continue;
     }
 
-    // 2) Create opportunity
+    // 2) Create Opportunity in the selected pipeline + stage
     const oppPayload = {
       pipelineId: PIPELINE_ID,
       locationId: LOCATION_ID,
       name: `${selectedData["First Name"]} ${selectedData["Last Name"]}`,
-      pipelineStageId: PIPELINE_STAGE,
+      pipelineStageId: PIPELINE_STAGE_ID,
       status: "open",
       contactId,
       monetaryValue: 0,
@@ -337,17 +379,22 @@ async function createOpportunitiesFromTable() {
         { id: "VKuJVd605d77bNsalDxi", key: "opportunity.date_of_birth_rx", field_value: selectedData["Date of Birth"] },
         { id: "4RNP82sEuvd8FYwemvfp", key: "opportunity.patient_age", field_value: selectedData["Age"] },
         { id: "tS9YG2C0eTyzPa3uBKEN", key: "opportunity.next_refill_date", field_value: selectedData["Next refill date"] },
-        { id: "takOv1oPpchD2mw0FlqP", key: "opportunity.medication_name", field_value: selectedData["Medication Name"] },
+        { id: "takOv1oPpchD2mw0FlqP", key: "opportunity.medication_name", field_value: selectedData["Medication name"] },
         { id: "ElNn9vke04rTLPPE41Qu", key: "opportunity.refills_remaining", field_value: selectedData["Refills remaining"] },
         { id: "THKGZ1DPfsIOskX2Xxr0", key: "opportunity.primary_category", field_value: selectedData["Primary Category"] },
         { id: "MhX3oQfMbmmQDAaN6Rk0", key: "opportunity.primary_tp_bin", field_value: selectedData["Primary TP BIN"] },
-        { id: "qnivc7LVe0JapYgNq1sw", key: "opportunity.primary_tp_pcn", field_vsalue: selectedData["Primary TP PCN"] },
+        { id: "qnivc7LVe0JapYgNq1sw", key: "opportunity.primary_tp_pcn", field_value: selectedData["Primary TP PCN"] },
         { id: "fOgmPzJJNZGSNhWJ8cEA", key: "opportunity.primary_tp_group_number", field_value: selectedData["Primary TP Group Number"] },
-        { id: "bZEO4i2DPeZScsOdJhJJ", key: "opportunity.insurance_mbi", field_value: selectedData["Insurance MBI"] },
-        { id: "QtoptYYdaxqJHv4Prj9q", key: "opportunity.serial_number", field_value: selectedData["Serial Number"] }
+        { id: "bZEO4i2DPeZScsOdJhJJ", key: "opportunity.insurance_mbi", field_value: selectedData["Primary Insurance MBI"] },
+        { id: "QtoptYYdaxqJHv4Prj9q", key: "opportunity.serial_number", field_value: selectedData["Serial Number"] },
+        { id: "ldBCHkqBTY8BEKwJEuNW", key: "opportunity.secondary_category", field_value: selectedData["Secondary Category"] },
+        { id: "xdOoyGq9S0kfDEiTAglg", key: "opportunity.secondary_tp_bin", field_value: selectedData["Secondary TP BIN"] },
+        { id: "jH96s68tncGPqNedLCVB", key: "opportunity.secondary_tp_pcn", field_value: selectedData["Secondary TP PCN"] },
+        { id: "wmlaobFo1FoYSh9gQPgc", key: "opportunity.secondary_tp_group_number", field_value: selectedData["Secondary TP Group Number"] },
+        { id: "u2KktwdAEbB7NyrGpYuP", key: "opportunity.secondary_insurance_mbi", field_value: selectedData["Secondary Insurance MBI"] }
       ]
     };
-    
+
     try {
       const oppRes = await fetch("https://services.leadconnectorhq.com/opportunities/", {
         method: "POST",
@@ -360,8 +407,8 @@ async function createOpportunitiesFromTable() {
         body: JSON.stringify(oppPayload)
       });
       if (!oppRes.ok) {
-          const errorBody = await oppRes.text();
-          throw new Error(`Opportunity creation failed: ${oppRes.status} ${errorBody}`);
+        const errorBody = await oppRes.text();
+        throw new Error(`Opportunity creation failed: ${oppRes.status} ${errorBody}`);
       }
       const oppData = await oppRes.json();
       console.log("Opportunity created:", oppData);
@@ -373,42 +420,3 @@ async function createOpportunitiesFromTable() {
 
   alert(`${opportunitiesCreated} of ${rows.length} opportunities processed successfully.`);
 }
-
-async function loadPipelines() {
-    const pipelineDropdown = document.getElementById("pipelineDropdown");
-    try {
-      const res = await fetch(`https://services.leadconnectorhq.com/opportunities/pipelines?locationId=${LOCATION_ID}`, {
-        method: "GET",
-        headers: {
-          Authorization: GHL_TOKEN,
-          Version: GHL_VERSION,
-          Accept: "application/json"
-        }
-      });
-  
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data = await res.json();
-  
-      pipelineDropdown.innerHTML = `<option value="">-- Select pipeline --</option>`;
-  
-      (data.pipelines || []).forEach(pipeline => {
-        const firstStage = (pipeline.stages || []).find(stage => stage.position === 1);
-        if (!firstStage) return;
-  
-        const option = document.createElement("option");
-        option.value = JSON.stringify({
-          pipelineId: pipeline.id,
-          stageId: firstStage.id
-        });
-        option.textContent = pipeline.name;
-        if (pipeline.id === PIPELINE_ID) {
-            option.selected = true;
-        }
-        pipelineDropdown.appendChild(option);
-      });
-  
-    } catch (err) {
-      console.error("Error loading pipelines:", err);
-      pipelineDropdown.innerHTML = `<option value="">Error loading pipelines</option>`;
-    }
-  }
