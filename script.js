@@ -391,7 +391,9 @@ async function createOpportunitiesFromTable() {
         { id: "xdOoyGq9S0kfDEiTAglg", key: "opportunity.secondary_tp_bin", field_value: selectedData["Secondary TP BIN"] },
         { id: "jH96s68tncGPqNedLCVB", key: "opportunity.secondary_tp_pcn", field_value: selectedData["Secondary TP PCN"] },
         { id: "wmlaobFo1FoYSh9gQPgc", key: "opportunity.secondary_tp_group_number", field_value: selectedData["Secondary TP Group Number"] },
-        { id: "u2KktwdAEbB7NyrGpYuP", key: "opportunity.secondary_insurance_mbi", field_value: selectedData["Secondary Insurance MBI"] }
+        { id: "u2KktwdAEbB7NyrGpYuP", key: "opportunity.secondary_insurance_mbi", field_value: selectedData["Secondary Insurance MBI"] },
+        { id: "zrYzP24ax8iTbOTFNOnM", key: "opportunity.medication_name", field_value: selectedData["Medication name"] },
+        { id: "xXhM4XBCCsCd7WzhOVaK", key: "opportunity.dispensed_item_name", field_value: selectedData["Dispensed Item Name"] }
       ]
     };
 
